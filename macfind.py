@@ -192,6 +192,20 @@ def cmd_add(args):
     print(f"Added '{args.name}' -> {mac} (resolved from {args.ip})")
 
 
+def print_help():
+    print("""macfind: find and track named devices on your LAN by MAC (survives DHCP IP changes)
+
+  mf                          show saved devices, current IP, online/offline
+  mf scan (s)                 sweep the whole subnet, show every live device
+  mf add (a) <name> <ip>      save a device, MAC resolved from its current IP
+  mf rename (rn) <old> <new>  rename a saved device
+  mf rm (remove) <name>       remove a saved device
+  mf ip <ip/subnet>           like "mf", but scan a different subnet just once
+  mf help (h)                 show this help
+
+flags (any command): --subnet, --known, --timeout, --threads""")
+
+
 def main():
     known_default = str(Path(__file__).parent / "devices.json")
 
@@ -209,7 +223,7 @@ def main():
              f"subnets if omitted, falling back to {FALLBACK_SUBNET}"
     )
 
-    parser = argparse.ArgumentParser(description=__doc__, parents=[common])
+    parser = argparse.ArgumentParser(prog="mf", description=__doc__, parents=[common])
     sub = parser.add_subparsers(dest="command")
     sub.add_parser("ls", parents=[common],
                     help="(default) show saved devices with current IP + online/offline")
@@ -234,7 +248,7 @@ def main():
     args = parser.parse_args()
 
     if args.command in ("help", "h"):
-        parser.print_help()
+        print_help()
         return
 
     if args.command in ("scan", "s"):
