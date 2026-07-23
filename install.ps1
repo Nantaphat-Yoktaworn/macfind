@@ -10,7 +10,7 @@ $branch = "main"
 $dest = "$env:LOCALAPPDATA\macfind"
 New-Item -ItemType Directory -Force -Path $dest | Out-Null
 
-foreach ($f in "macfind.py", "macfind.cmd", "mac.cmd") {
+foreach ($f in "macfind.py", "macfind.cmd", "mf.cmd") {
     Invoke-WebRequest -Uri "https://raw.githubusercontent.com/$repo/$branch/$f" -OutFile "$dest\$f"
 }
 
