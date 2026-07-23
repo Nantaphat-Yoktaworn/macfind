@@ -35,36 +35,74 @@ def hostname(ip: str) -> str:
 
 
 def arp_table() -> dict:
-    """IP -> MAC, read from the OS ARP cache (populated by the ping sweep)."""
-    out = subprocess.run(["arp", "-a"], capture_output=True, text=True).stdout
+    """IP -> MAC, read from the OS ARP/neighbor cache (populated by the ping sweep)."""
     table = {}
+    if IS_WINDOWS:
+        out = subprocess.run(["arp", "-a"], capture_output=True, text=True).stdout
+        for line in out.splitlines():
+            parts = line.split()
+            if len(parts) >= 2 and parts[0].count(".") == 3:
+                ip, mac = parts[0], parts[1]
+                if mac.count("-") == 5 or mac.count(":") == 5:
+                    table[ip] = mac.lower().replace("-", ":")
+        return table
+
+    # Linux: prefer `ip neighbor` (iproute2, on by default on modern distros)
+    try:
+        out = subprocess.run(["ip", "neighbor"], capture_output=True, text=True).stdout
+        for line in out.splitlines():
+            parts = line.split()
+            if "lladdr" in parts:
+                table[parts[0]] = parts[parts.index("lladdr") + 1].lower()
+        if table:
+            return table
+    except FileNotFoundError:
+        pass
+
+    # fall back to `arp -a` (older Linux net-tools, also works on macOS)
+    try:
+        out = subprocess.run(["arp", "-a"], capture_output=True, text=True).stdout
+    except FileNotFoundError:
+        return table
     for line in out.splitlines():
-        parts = line.split()
-        if len(parts) >= 2 and parts[0].count(".") == 3:
-            ip, mac = parts[0], parts[1]
-            if mac.count("-") == 5 or mac.count(":") == 5:
-                table[ip] = mac.lower().replace("-", ":")
+        ip_m = re.search(r"\((\d{1,3}(?:\.\d{1,3}){3})\)", line)
+        mac_m = re.search(r"[0-9A-Fa-f]{2}(?::[0-9A-Fa-f]{2}){5}", line)
+        if ip_m and mac_m:
+            table[ip_m.group(1)] = mac_m.group().lower()
     return table
 
 
 def local_subnets() -> list:
-    """Subnets of this PC's currently-connected network adapters, via ipconfig."""
-    # ponytail: Windows-only (ipconfig parsing); add `ip -4 addr` parsing if run on Linux
-    if not IS_WINDOWS:
+    """Subnets of this PC's currently-connected network adapters."""
+    if IS_WINDOWS:
+        out = subprocess.run(["ipconfig"], capture_output=True, text=True).stdout
+        subnets, ip = [], None
+        for line in out.splitlines():
+            if "IPv4 Address" in line:
+                m = IPV4_RE.search(line)
+                ip = m.group() if m else None
+            elif "Subnet Mask" in line and ip:
+                m = IPV4_RE.search(line)
+                if m:
+                    net = ipaddress.ip_network(f"{ip}/{m.group()}", strict=False)
+                    if not net.is_loopback and not net.is_link_local:
+                        subnets.append(str(net))
+                ip = None
+        return subnets
+
+    # Linux: `ip -4 -o addr show` (iproute2)
+    # ponytail: Linux only; add ifconfig parsing if macOS support is needed
+    try:
+        out = subprocess.run(["ip", "-4", "-o", "addr", "show"], capture_output=True, text=True).stdout
+    except FileNotFoundError:
         return []
-    out = subprocess.run(["ipconfig"], capture_output=True, text=True).stdout
-    subnets, ip = [], None
+    subnets = []
     for line in out.splitlines():
-        if "IPv4 Address" in line:
-            m = IPV4_RE.search(line)
-            ip = m.group() if m else None
-        elif "Subnet Mask" in line and ip:
-            m = IPV4_RE.search(line)
-            if m:
-                net = ipaddress.ip_network(f"{ip}/{m.group()}", strict=False)
-                if not net.is_loopback and not net.is_link_local:
-                    subnets.append(str(net))
-            ip = None
+        m = re.search(r"inet (\d{1,3}(?:\.\d{1,3}){3})/(\d{1,2})", line)
+        if m:
+            net = ipaddress.ip_network(f"{m.group(1)}/{m.group(2)}", strict=False)
+            if not net.is_loopback and not net.is_link_local:
+                subnets.append(str(net))
     return subnets
 
 

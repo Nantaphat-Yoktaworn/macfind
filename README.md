@@ -11,7 +11,7 @@ maintain. The name always follows the device, even after its IP changes.
 
 ## Install
 
-Windows, PowerShell:
+**Windows**, PowerShell:
 
 ```powershell
 irm https://raw.githubusercontent.com/Nantaphat-Yoktaworn/macfind/main/install.ps1 | iex
@@ -21,6 +21,15 @@ Requires Python to already be on PATH. The installer checks for it and tells
 you where to get it if it's missing. Downloads to `%LOCALAPPDATA%\macfind`
 and adds that folder to your user PATH — close and reopen PowerShell
 afterward for the `mf` command to be recognized.
+
+**Linux**, any shell:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/Nantaphat-Yoktaworn/macfind/main/install.sh | bash
+```
+
+Requires `python3` on PATH. Installs to `~/.local/bin`; if that's not already
+on your PATH the installer tells you the line to add to `~/.bashrc`/`~/.zshrc`.
 
 ## Usage
 
@@ -37,9 +46,10 @@ mf help (h)                 show this help
 Flags available on any command: `--subnet`, `--known`, `--timeout`, `--threads`.
 
 By default macfind auto-detects every subnet your PC's network adapters are
-currently connected to (via `ipconfig`) and sweeps all of them — no config
-needed even if you're on multiple networks at once (e.g. two adapters, or a
-VPN). `--subnet` overrides this, and accepts a comma-separated list.
+currently connected to (`ipconfig` on Windows, `ip addr` on Linux) and sweeps
+all of them — no config needed even if you're on multiple networks at once
+(e.g. two adapters, or a VPN). `--subnet` overrides this, and accepts a
+comma-separated list.
 
 ## How it works
 
@@ -67,7 +77,8 @@ You normally don't hand-edit this — `mf add`/`rename`/`rm` manage it for you.
 
 ## Platform
 
-Windows only for now (`ipconfig`/`arp -a` output parsing and the installer
-are Windows-specific). The ping sweep itself is cross-platform, so porting
-to Linux/macOS mainly means adding ARP-cache and subnet-detection parsing
-for those platforms.
+Windows and Linux. On Linux, MAC lookups use `ip neighbor` (falling back to
+`arp -a`) and subnet detection uses `ip addr` — both parts of `iproute2`,
+present by default on virtually all modern distros. macOS isn't supported
+yet (different `ifconfig`-based subnet detection would be needed), though
+`arp -a` parsing happens to already work there.
