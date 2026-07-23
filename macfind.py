@@ -96,8 +96,25 @@ def local_subnets() -> list:
         out = subprocess.run(["ip", "-4", "-o", "addr", "show"], capture_output=True, text=True).stdout
     except FileNotFoundError:
         return []
+
+    # Skip bridge interfaces (Docker, libvirt, etc.) — their subnets are huge and virtual
+    bridge_ifaces: set = set()
+    try:
+        br_out = subprocess.run(
+            ["ip", "-o", "link", "show", "type", "bridge"], capture_output=True, text=True
+        ).stdout
+        for ln in br_out.splitlines():
+            parts = ln.split(":")
+            if len(parts) >= 2:
+                bridge_ifaces.add(parts[1].strip())
+    except FileNotFoundError:
+        pass
+
     subnets = []
     for line in out.splitlines():
+        iface_m = re.match(r"\d+:\s+(\S+)", line)
+        if iface_m and iface_m.group(1) in bridge_ifaces:
+            continue
         m = re.search(r"inet (\d{1,3}(?:\.\d{1,3}){3})/(\d{1,2})", line)
         if m:
             net = ipaddress.ip_network(f"{m.group(1)}/{m.group(2)}", strict=False)
