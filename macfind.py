@@ -15,6 +15,7 @@ IS_WINDOWS = platform.system() == "Windows"
 STATE_PATH = Path(__file__).parent / "last_seen.json"
 FALLBACK_SUBNET = "192.168.20.0/24"
 IPV4_RE = re.compile(r"\d{1,3}(?:\.\d{1,3}){3}")
+socket.setdefaulttimeout(1)  # bound reverse-DNS lookups so one slow host can't stall a scan
 
 
 def ping(ip: str, timeout_ms: int) -> bool:
@@ -118,11 +119,14 @@ def cmd_scan(args):
     print(f"Scanned {', '.join(subnets)}")
     ordered = sorted(alive, key=lambda ip: tuple(int(p) for p in ip.split(".")))
 
+    with ThreadPoolExecutor(max_workers=args.threads) as pool:
+        hostnames = dict(zip(ordered, pool.map(hostname, ordered)))
+
     print(f"\n{'IP':<16}{'MAC':<20}{'Name':<20}{'Hostname'}")
     for ip in ordered:
         mac = arp.get(ip, "")
         name = known.get(ip) or known.get(mac) or ""
-        print(f"{ip:<16}{mac:<20}{name:<20}{hostname(ip)}")
+        print(f"{ip:<16}{mac:<20}{name:<20}{hostnames[ip]}")
 
     unknown = [ip for ip in ordered if ip not in known and arp.get(ip, "") not in known]
     if unknown:
